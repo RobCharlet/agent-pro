@@ -3,6 +3,7 @@ import type { Score, Scorer } from 'autoevals'
 import chalk from 'chalk'
 import { JSONFilePreset } from 'lowdb/node'
 
+// Database interface types
 type Run = {
   input: any
   output: any
@@ -29,15 +30,18 @@ type Data = {
   experiments: Experiment[]
 }
 
+// Default empty database structure
 const defaultData: Data = {
   experiments: [],
 }
 
+// Initialize or load the JSON database
 const getDb = async () => {
   const db = await JSONFilePreset<Data>('results.json', defaultData)
   return db
 }
 
+// Calculate average score across all runs and their individual scores
 const calculateAvgScore = (runs: Run[]) => {
   const totalScores = runs.reduce((sum, run) => {
     const runAvg =
@@ -48,6 +52,7 @@ const calculateAvgScore = (runs: Run[]) => {
   return totalScores / runs.length
 }
 
+// Retrieve an experiment by name from the database
 export const loadExperiment = async (
   experimentName: string
 ): Promise<Experiment | undefined> => {
@@ -55,23 +60,27 @@ export const loadExperiment = async (
   return db.data.experiments.find((e) => e.name === experimentName)
 }
 
+// Save a new set of runs to an experiment
 export const saveSet = async (
   experimentName: string,
   runs: Omit<Run, 'createdAt'>[]
 ) => {
   const db = await getDb()
 
+  // Add timestamps to runs
   const runsWithTimestamp = runs.map((run) => ({
     ...run,
     createdAt: new Date().toISOString(),
   }))
 
+  // Create new set with calculated score
   const newSet = {
     runs: runsWithTimestamp,
     score: calculateAvgScore(runsWithTimestamp),
     createdAt: new Date().toISOString(),
   }
 
+  // Add to existing experiment or create new one
   const existingExperiment = db.data.experiments.find(
     (e) => e.name === experimentName
   )
@@ -88,6 +97,7 @@ export const saveSet = async (
   await db.write()
 }
 
+// Main evaluation function that runs tasks and compares results
 export const runEval = async <T = any>(
   experiment: string,
   {
@@ -100,12 +110,14 @@ export const runEval = async <T = any>(
     scorers: Scorer<T, any>[]
   }
 ) => {
+  // Execute all tasks and collect results
   const results = await Promise.all(
     data.map(async ({ input, expected, reference }) => {
       const results = await task(input)
       let context: string | string[]
       let output: string
 
+      // Handle different result formats
       if (results.context) {
         context = results.context
         output = results.response
@@ -113,6 +125,7 @@ export const runEval = async <T = any>(
         output = results
       }
 
+      // Calculate scores using provided scorers
       const scores = await Promise.all(
         scorers.map(async (scorer) => {
           const score = await scorer({
@@ -129,23 +142,18 @@ export const runEval = async <T = any>(
         })
       )
 
-      const result = {
-        input,
-        output,
-        expected,
-        scores,
-      }
-
-      return result
+      return { input, output, expected, scores }
     })
   )
 
+  // Compare with previous results and display progress
   const previousExperiment = await loadExperiment(experiment)
   const previousScore =
     previousExperiment?.sets[previousExperiment.sets.length - 1]?.score || 0
   const currentScore = calculateAvgScore(results)
   const scoreDiff = currentScore - previousScore
 
+  // Color-code output based on score difference
   const color = previousExperiment
     ? scoreDiff > 0
       ? chalk.green
@@ -154,6 +162,7 @@ export const runEval = async <T = any>(
       : chalk.blue
     : chalk.blue
 
+  // Display results
   console.log(`Experiment: ${experiment}`)
   console.log(`Previous score: ${color(previousScore.toFixed(2))}`)
   console.log(`Current score: ${color(currentScore.toFixed(2))}`)

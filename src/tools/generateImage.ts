@@ -11,7 +11,7 @@ export const generateImageToolDefinition = {
         `prompt for the image. Be sure to consider the user's original message when making the prompt. If you are unsure, then as the user to provide more details.`
       ),
   }),
-  description: 'generate an image',
+  description: 'generate an image. Taking a photo a photo is the same as generating an image.',
 }
 
 type Args = z.infer<typeof generateImageToolDefinition.parameters>
